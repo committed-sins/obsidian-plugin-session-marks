@@ -817,3 +817,36 @@ test('runtime counts file renames only when enabled and never counts folder rena
         });
     }
 });
+
+test('unexcluded Templater source produces neither notices nor metadata writes and rendered notes remain trackable', async () =>
+{
+    await fixture(async (f) =>
+    {
+        const notices = [];
+        f.api.Notice = class
+        {
+            constructor(message)
+            {
+                notices.push(message);
+            }
+        };
+        f.view.file.path = 'templates/Example.md';
+        const source =
+            "---\n<% 'created: ' %><% tp.date.now('YYYY-MM-DD[T]HH:mm:ssZ') %>\n---\nTemplate";
+        f.setContent(source);
+        f.callbacks.get('vault:modify')(f.view.file);
+        await f.complete();
+        await f.end();
+        assert.deepEqual(notices, []);
+        assert.equal(f.disk(), source);
+        assert.equal(f.writes(), 0);
+        f.view.file.path = 'notes/rendered.md';
+        f.setContent(note('rendered note'));
+        f.start();
+        f.edit();
+        await f.view.save();
+        await f.complete();
+        assert.equal(f.writes(), 1);
+        assert.equal(JSON.parse(info(f.disk()).frontmatter).revision, 2);
+    });
+});

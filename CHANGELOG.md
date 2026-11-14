@@ -1,6 +1,13 @@
 # Changelog
 
-## 0.1.8 â€” Beta
+## 0.1.9 - Beta
+
+- Defer unrendered Templater frontmatter without parsing or modifying template source files.
+- Isolate malformed frontmatter during checkpoints so other notes remain recoverable.
+- Report invalid YAML with the note path and no private parser excerpts.
+- Simplify README notices and add a direct issue-reporting link.
+
+## 0.1.8 — Beta
 
 - Keep pending sessions and recovery paths attached to renamed files, including renames during hashing, reads and writes.
 - Add optional "Count file renames as revisions", off by default; combine content edits and file renames in one session and recover without duplicate increments.
@@ -9,7 +16,7 @@
 - Preserve every existing saved exclusion list and the ability to configure root folders and their descendants.
 - Verify both the empty new-install UI/runtime and unchanged loading of existing settings.
 
-## 0.1.7 â€” Beta
+## 0.1.7 — Beta
 
 - Prepare the first installable beta with MIT licensing and visible beta identification.
 - Shorten the README around behavior, installation and essential settings; move implementation and compatibility details into focused guides.

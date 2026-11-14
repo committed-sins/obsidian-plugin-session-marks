@@ -1,7 +1,12 @@
 // Device-local session state, content comparisons and idempotent recovery.
 // File access and application behavior are supplied by the runtime adapter.
 import { eligibleNote } from './note-paths.mjs';
-import { comparableContent, metadataOf, sha256 } from './note-content.mjs';
+import {
+    comparableContent,
+    hasPendingTemplateFrontmatter,
+    metadataOf,
+    sha256,
+} from './note-content.mjs';
 import { propertyNames, revisionEnabled } from './properties.mjs';
 
 export function createSessionTracker({
@@ -119,10 +124,16 @@ export function createSessionTracker({
         report(error);
     }
     const eligible = isEligible;
-    const enqueue = (operation) =>
+    const reportNoteError = (error, path) =>
+    {
+        if (error?.code === 'REVISION_MARKS_INVALID_FRONTMATTER') {
+            report(Object.assign(new Error(`${path}: ${error.message}`), { code: error.code }));
+        } else report(error);
+    };
+    const enqueue = (operation, location) =>
     {
         const result = queue.then(operation);
-        queue = result.catch(report);
+        queue = result.catch((error) => reportNoteError(error, location?.path));
         return queue;
     };
     const snapshot = async (session, path) =>
@@ -152,6 +163,8 @@ export function createSessionTracker({
     const change = (path, before, after) =>
     {
         if (!available || !eligible(path)) return;
+        if (hasPendingTemplateFrontmatter(before, api) || hasPendingTemplateFrontmatter(after, api))
+            return;
         const session = sessions.get(path) ?? {};
         session.before ??= before;
         session.after = after;
@@ -163,7 +176,13 @@ export function createSessionTracker({
         enqueue(async () =>
         {
             if (!available) return;
-            for (const [path, session] of sessions) await snapshot(session, path);
+            for (const [path, session] of sessions) {
+                try {
+                    await snapshot(session, path);
+                } catch (error) {
+                    reportNoteError(error, path);
+                }
+            }
             save();
             saveBaselines();
         });
@@ -211,7 +230,7 @@ export function createSessionTracker({
                 },
             });
             save();
-        });
+        }, location);
     };
     const finish = (path, { force = false, shutdown = false } = {}) =>
     {
@@ -382,7 +401,7 @@ export function createSessionTracker({
             }
             save();
             saveBaselines();
-        });
+        }, location);
     };
     const rename = (oldPath, newPath, { countRevision = false } = {}) =>
     {

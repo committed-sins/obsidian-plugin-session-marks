@@ -39,4 +39,4 @@ gh attestation verify manifest.json -R committed-sins/obsidian-plugin-revision-m
 gh attestation verify styles.css -R committed-sins/obsidian-plugin-revision-marks
 ```
 
-See GitHub's [artifact attestation documentation](https://docs.github.com/en/actions/how-tos/secure-your-work/use-artifact-attestations/use-artifact-attestations). Provenance is evidence of a source build, not a guarantee of functional correctness. A first-submission review does not establish Android lifecycle correctness; keep beta notes current until live validation is complete.
+See GitHub's [artifact attestation documentation](https://docs.github.com/en/actions/how-tos/secure-your-work/use-artifact-attestations/use-artifact-attestations). Provenance is evidence of a source build, not a guarantee of functional correctness. Keep future release notes focused on changes, fixes and relevant known issues. Omit the generic notice that Android has not yet been tested; do not claim live validation unless it has actually been performed.

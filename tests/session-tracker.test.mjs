@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createHash } from 'node:crypto';
-import { comparableContent } from '../src/note-content.mjs';
+import { comparableContent, metadataOf } from '../src/note-content.mjs';
 import { createSessionTracker } from '../src/session-tracker.mjs';
 import { eligibleNote } from '../src/note-paths.mjs';
 
@@ -695,4 +695,53 @@ test('counted renames respect exclusions and disabled revision mode', async () =
     await off.rename('notes/A.md', 'notes/Renamed.md', { countRevision: true });
     await off.finish('notes/Renamed.md', { force: true });
     assert.equal(f.writes.length, 0);
+});
+
+test('unrendered Templater headers are deferred before YAML parsing, while body examples remain ordinary content', async () =>
+{
+    const f = fixture();
+    const template =
+        "---\n<% 'created: ' %><% tp.date.now('YYYY-MM-DD[T]HH:mm:ssZ') %>\n---\nTemplate body";
+    for (const text of [template, note('body', { created: '<% tp.date.now() %>' })]) {
+        assert.throws(() => comparableContent(text, api), { code: 'SESSION_MARKS_DEFERRED' });
+        assert.throws(() => metadataOf(text, api), { code: 'SESSION_MARKS_DEFERRED' });
+        f.files.set('templates/Example.md', text);
+        await f.tracker.observe('templates/Example.md', text, 1);
+        f.tracker.change('templates/Example.md', text, text + ' edit');
+        await f.tracker.checkpoint();
+        assert.equal(f.files.get('templates/Example.md'), text);
+    }
+    assert.deepEqual(f.tracker.paths(), []);
+    assert.equal(f.writes.length, 0);
+    assert.ok(f.errors.every((error) => error.code === 'SESSION_MARKS_DEFERRED'));
+    const before = note('Example: <% tp.date.now() %>', initial);
+    const after = note('Updated example: <% tp.date.now() %>', initial);
+    f.files.set('notes/A.md', before);
+    f.edit(after);
+    await f.tracker.finish('notes/A.md', { force: true });
+    assert.equal(properties(f.files.get('notes/A.md')).updated_count, 8);
+});
+
+test('YAML errors do not leak parser excerpts or block checkpoints and recovery for other notes', async () =>
+{
+    const f = fixture();
+    const malformed = '---\nprivate-secret: [unterminated\n---\nkeep this body';
+    f.edit(malformed);
+    const goodBefore = note('before', initial), goodAfter = note('good changed', initial);
+    f.files.set('notes/Good.md', goodBefore);
+    f.edit(goodAfter, 'notes/Good.md');
+    await f.tracker.checkpoint();
+    const entries = JSON.parse(f.storageData.get('test')).entries;
+    assert.deepEqual(entries.map((entry) => entry.path), ['notes/Good.md']);
+    assert.equal(f.errors.length, 1);
+    assert.match(f.errors[0].message, /notes\/A.md: Invalid YAML/);
+    assert.ok(!f.errors[0].stack.includes('private-secret'));
+    const recovered = createSessionTracker(f.options);
+    await recovered.finish('notes/Good.md', { force: true });
+    assert.equal(properties(f.files.get('notes/Good.md')).updated_count, 8);
+    assert.equal(f.files.get('notes/A.md'), malformed);
+    // The live session can still finish after the user repairs its frontmatter.
+    f.edit(note('repaired body', initial));
+    await f.tracker.finish('notes/A.md', { force: true });
+    assert.equal(properties(f.files.get('notes/A.md')).updated_count, 8);
 });

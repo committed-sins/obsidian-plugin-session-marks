@@ -122,7 +122,7 @@ export function startEditSessions(app, api)
             return;
         const info = update.state.field(api.editorInfoField, false);
         const file = info?.file;
-        if (!file || !isActive(file.path)) return;
+        if (!file || !eligible(file.path) || !isActive(file.path)) return;
         // Embedded/table-cell editors must not be mistaken for a whole note.
         if (info.editor?.getValue() !== update.state.doc.toString()) return;
         if (

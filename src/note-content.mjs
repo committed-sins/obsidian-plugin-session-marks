@@ -1,12 +1,46 @@
 import { propertyNames, revisionEnabled } from './properties.mjs';
 
+/** A template header is source code, not note metadata ready for stamping. */
+export function hasPendingTemplateFrontmatter(text, api)
+{
+    const info = api.getFrontMatterInfo(text);
+    return info.exists && /<%[\s\S]*?%>/.test(info.frontmatter);
+}
+
+function readFrontmatter(text, api)
+{
+    const info = api.getFrontMatterInfo(text);
+    if (hasPendingTemplateFrontmatter(text, api)) {
+        throw Object.assign(new Error('Unrendered Templater frontmatter; completion deferred.'), {
+            code: 'SESSION_MARKS_DEFERRED',
+        });
+    }
+    let properties;
+    try {
+        properties = info.exists ? (api.parseYaml(info.frontmatter) ?? {}) : {};
+    } catch {
+        // Parser errors can contain entire lines of private note text.
+        throw Object.assign(
+            new Error(
+                'Invalid YAML frontmatter; note left unchanged. Check its YAML or exclude its folder.',
+            ),
+            {
+                code: 'REVISION_MARKS_INVALID_FRONTMATTER',
+            },
+        );
+    }
+    if (typeof properties !== 'object' || Array.isArray(properties)) {
+        throw Object.assign(new Error('Frontmatter must be a mapping; note left unchanged.'), {
+            code: 'REVISION_MARKS_INVALID_FRONTMATTER',
+        });
+    }
+    return { info, properties };
+}
+
 export function comparableContent(text, api, comparisonVersion = 2, overrides = {})
 {
     text = text.replace(/\r\n?/g, '\n');
-    const info = api.getFrontMatterInfo(text);
-    const properties = info.exists ? (api.parseYaml(info.frontmatter) ?? {}) : {};
-    if (typeof properties !== 'object' || Array.isArray(properties))
-        throw new Error('Frontmatter must be a mapping');
+    const { info, properties } = readFrontmatter(text, api);
     const stable = (value) =>
     {
         if (value instanceof Date) return value.toISOString();
@@ -37,8 +71,7 @@ export function comparableContent(text, api, comparisonVersion = 2, overrides = 
 
 export function metadataOf(text, api)
 {
-    const info = api.getFrontMatterInfo(text);
-    const fm = info.exists ? (api.parseYaml(info.frontmatter) ?? {}) : {};
+    const { properties: fm } = readFrontmatter(text, api);
     const names = propertyNames(api);
     const count = revisionEnabled(api) ? (fm[names.revision] ?? 0) : 0;
     if (!Number.isSafeInteger(count) || count < 0)
